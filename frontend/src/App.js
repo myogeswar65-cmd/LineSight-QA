@@ -1,53 +1,37 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+import { Toaster } from "@/components/ui/sonner";
+import { AppShell } from "@/components/AppShell";
+import Dashboard from "@/pages/Dashboard";
+import ProductLines from "@/pages/ProductLines";
+import LineDetail from "@/pages/LineDetail";
+import InspectionResult from "@/pages/InspectionResult";
 
 function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem("ls-theme") || "light");
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "dark") root.classList.add("dark");
+    else root.classList.remove("dark");
+    localStorage.setItem("ls-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
+
   return (
     <div className="App">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
+        <AppShell theme={theme} onToggleTheme={toggleTheme}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/lines" element={<ProductLines />} />
+            <Route path="/lines/:id" element={<LineDetail />} />
+            <Route path="/inspections/:id" element={<InspectionResult />} />
+          </Routes>
+        </AppShell>
+        <Toaster position="top-right" richColors />
       </BrowserRouter>
     </div>
   );
