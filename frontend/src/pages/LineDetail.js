@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, b64ToFile, dataUri, timeAgo, fmtDate } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { UploadDropzone } from "@/components/UploadDropzone";
 import { EmptyState } from "@/components/EmptyState";
 import {
   ArrowLeft, CheckCircle2, CircleDashed, Sparkles, ScanSearch, History, Lightbulb,
-  ImagePlus, ExternalLink, Trash2, MapPin, Layers,
+  ImagePlus, ExternalLink, Trash2, MapPin, Layers, GitBranch, RotateCcw, Clock,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -32,6 +32,7 @@ export default function LineDetail() {
   const [line, setLine] = useState(null);
   const [samples, setSamples] = useState(null);
   const [tab, setTab] = useState("calibration");
+  const didInit = useRef(false);
 
   const loadLine = useCallback(() => api.get(`/product-lines/${id}`).then((r) => setLine(r.data)), [id]);
 
@@ -41,9 +42,11 @@ export default function LineDetail() {
   }, [id, loadLine]);
 
   useEffect(() => {
-    if (line && line.calibrated && tab === "calibration") setTab("inspect");
-    // eslint-disable-next-line
-  }, [line?.calibrated]);
+    if (line && !didInit.current) {
+      didInit.current = true;
+      setTab(line.calibrated ? "inspect" : "calibration");
+    }
+  }, [line]);
 
   if (!line) {
     return <div className="space-y-4"><Skeleton className="h-10 w-64" /><Skeleton className="h-64" /></div>;
@@ -77,6 +80,7 @@ export default function LineDetail() {
         <TabsList data-testid="line-tabs" className="flex-wrap">
           <TabsTrigger value="calibration" data-testid="tab-calibration"><Sparkles className="mr-1.5 h-4 w-4" /> Calibration</TabsTrigger>
           <TabsTrigger value="inspect" data-testid="tab-inspect"><ScanSearch className="mr-1.5 h-4 w-4" /> Inspect</TabsTrigger>
+          <TabsTrigger value="versions" data-testid="tab-versions"><GitBranch className="mr-1.5 h-4 w-4" /> Versions</TabsTrigger>
           <TabsTrigger value="history" data-testid="tab-history"><History className="mr-1.5 h-4 w-4" /> History</TabsTrigger>
           <TabsTrigger value="insights" data-testid="tab-insights"><Lightbulb className="mr-1.5 h-4 w-4" /> Insights</TabsTrigger>
         </TabsList>
@@ -86,6 +90,9 @@ export default function LineDetail() {
         </TabsContent>
         <TabsContent value="inspect" className="mt-5">
           <InspectTab line={line} samples={samples} onDone={loadLine} />
+        </TabsContent>
+        <TabsContent value="versions" className="mt-5">
+          <VersionsTab lineId={id} onDone={loadLine} />
         </TabsContent>
         <TabsContent value="history" className="mt-5">
           <HistoryTab lineId={id} />
@@ -115,7 +122,7 @@ function CalibrationTab({ line, samples, onDone }) {
     } finally { setBusy(false); }
   };
 
-  const useDemo = () => {
+  const runDemo = () => {
     if (!samples) return;
     const files = samples.good.map((b, i) => b64ToFile(b, `good${i}.jpg`));
     calibrate(files);
@@ -133,7 +140,7 @@ function CalibrationTab({ line, samples, onDone }) {
           <div className="mt-3 flex items-center gap-2">
             <div className="h-px flex-1 bg-border" /><span className="text-xs text-muted-foreground">or</span><div className="h-px flex-1 bg-border" />
           </div>
-          <Button variant="outline" className="mt-3 w-full" data-testid="calibrate-demo-button" disabled={busy || !samples} onClick={useDemo}>
+          <Button variant="outline" className="mt-3 w-full" data-testid="calibrate-demo-button" disabled={busy || !samples} onClick={runDemo}>
             <ImagePlus className="mr-2 h-4 w-4" /> Use demo sample parts
           </Button>
         </Card>
@@ -196,7 +203,7 @@ function InspectTab({ line, samples, onDone }) {
     } finally { setBusy(false); }
   };
 
-  const useDemo = (b64) => runInspect([b64ToFile(b64, "demo.jpg")]);
+  const runDemo = (b64) => runInspect([b64ToFile(b64, "demo.jpg")]);
 
   if (!line.calibrated) {
     return <EmptyState icon={Sparkles} title="Calibrate first" description="This line has no baseline yet. Head to the Calibration tab and upload good reference images." />;
@@ -216,7 +223,7 @@ function InspectTab({ line, samples, onDone }) {
               <div className="text-xs font-medium text-muted-foreground">Or try a demo part:</div>
               <div className="mt-2 grid grid-cols-5 gap-2">
                 {samples.defects.map((d, i) => (
-                  <button key={i} data-testid={`demo-defect-${d.type}`} disabled={busy} onClick={() => useDemo(d.image)}
+                  <button key={i} data-testid={`demo-defect-${d.type}`} disabled={busy} onClick={() => runDemo(d.image)}
                     className="group overflow-hidden rounded-md border border-border transition-colors hover:border-primary disabled:opacity-50">
                     <img src={dataUri(d.image)} alt={d.type} className="aspect-square w-full object-cover" />
                     <div className="truncate bg-card px-1 py-0.5 text-[9px] text-muted-foreground">{d.type}</div>
@@ -254,6 +261,95 @@ function InspectTab({ line, samples, onDone }) {
             Inspection results will appear here.
           </Card>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------- Versions -------------------------------- */
+function VersionsTab({ lineId, onDone }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(null);
+
+  const load = useCallback(() => {
+    api.get(`/product-lines/${lineId}/baseline-versions`).then((r) => setData(r.data));
+  }, [lineId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const activate = async (version) => {
+    setBusy(version);
+    try {
+      await api.post(`/product-lines/${lineId}/baseline-versions/${version}/activate`);
+      toast.success(`Restored baseline v${version}`);
+      load();
+      onDone && onDone();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Restore failed");
+    } finally { setBusy(null); }
+  };
+
+  if (!data) return <div className="space-y-3">{[0, 1].map((i) => <Skeleton key={i} className="h-32" />)}</div>;
+
+  if (!data.versions.length) {
+    return <EmptyState icon={GitBranch} title="No baseline versions yet" description="Every time you calibrate this line, a restorable baseline version is saved here. Calibrate it from the Calibration tab to begin." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-base font-semibold">Baseline versions</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Each calibration is saved as a version. Restore any previous baseline in one click.</p>
+        </div>
+        <Badge variant="secondary" className="gap-1"><Layers className="h-3 w-3" /> {data.versions.length} versions</Badge>
+      </div>
+
+      <div className="relative space-y-4 pl-6" data-testid="baseline-versions-list">
+        {/* timeline rail */}
+        <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
+        {data.versions.map((v) => (
+          <div key={v.id} className="relative" data-testid={`version-row-${v.version}`}>
+            <span className={`absolute -left-[22px] top-5 h-3.5 w-3.5 rounded-full border-2 ${v.active ? "border-primary bg-primary" : "border-border bg-card"}`} />
+            <Card className={`p-4 sm:p-5 transition-shadow ${v.active ? "ring-1 ring-primary/40" : ""}`}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-lg font-bold">v{v.version}</span>
+                    {v.active ? (
+                      <Badge className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200"><CheckCircle2 className="h-3 w-3" /> Active</Badge>
+                    ) : (
+                      <Badge variant="secondary">Archived</Badge>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {fmtDate(v.created_at)}</span>
+                    <span className="inline-flex items-center gap-1"><ImagePlus className="h-3.5 w-3.5" /> {v.sample_count} samples</span>
+                    <span className="inline-flex items-center gap-1"><Layers className="h-3.5 w-3.5" /> {v.component_count} components</span>
+                    <span className="inline-flex items-center gap-1"><ScanSearch className="h-3.5 w-3.5" /> {v.inspections_used} inspections</span>
+                  </div>
+                  {v.part_summary && <p className="mt-2 line-clamp-2 text-sm">{v.part_summary}</p>}
+                  {v.images?.length > 0 && (
+                    <div className="mt-3 flex gap-1.5">
+                      {v.images.slice(0, 6).map((img, i) => (
+                        <img key={i} src={dataUri(img)} alt="" className="h-11 w-11 rounded-md border border-border object-cover" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="shrink-0">
+                  {v.active ? (
+                    <Button size="sm" variant="outline" disabled className="cursor-default"><CheckCircle2 className="mr-1.5 h-4 w-4" /> In use</Button>
+                  ) : (
+                    <Button size="sm" data-testid={`restore-version-${v.version}`} disabled={busy === v.version} onClick={() => activate(v.version)}>
+                      <RotateCcw className="mr-1.5 h-4 w-4" /> {busy === v.version ? "Restoring…" : "Restore"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </div>
+        ))}
       </div>
     </div>
   );

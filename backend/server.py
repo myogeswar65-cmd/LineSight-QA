@@ -131,6 +131,7 @@ async def delete_line(line_id: str):
     if res.deleted_count == 0:
         raise HTTPException(404, "Product line not found")
     await db.inspections.delete_many({"product_line_id": line_id})
+    await db.baseline_versions.delete_many({"product_line_id": line_id})
     return {"ok": True}
 
 
@@ -163,11 +164,27 @@ async def calibrate(line_id: str, files: List[UploadFile] = File(...)):
         logger.exception("baseline build failed")
         raise HTTPException(502, f"Calibration failed: {e}")
 
-    version = doc.get("baseline_version", 0) + 1
+    # New version number = max existing + 1 (so rollback then recalibrate never collides)
+    existing = await db.baseline_versions.find({"product_line_id": line_id}, {"_id": 0, "version": 1}).to_list(1000)
+    max_v = max([v["version"] for v in existing], default=doc.get("baseline_version", 0))
+    version = max_v + 1
+    ts = now_iso()
+
+    version_doc = {
+        "id": str(uuid.uuid4()),
+        "product_line_id": line_id,
+        "version": version,
+        "profile": profile,
+        "images": thumbs[:8],
+        "sample_count": len(b64_full),
+        "created_at": ts,
+    }
+    await db.baseline_versions.insert_one(dict(version_doc))
+
     update = {
         "baseline_profile": profile,
         "baseline_images": thumbs[:8],
-        "baseline_updated_at": now_iso(),
+        "baseline_updated_at": ts,
         "baseline_version": version,
     }
     if not doc.get("cover") and thumbs:
@@ -175,6 +192,69 @@ async def calibrate(line_id: str, files: List[UploadFile] = File(...)):
     await db.product_lines.update_one({"id": line_id}, {"$set": update})
     merged = {**doc, **update}
     return line_public(merged)
+
+
+async def _backfill_versions(line: dict):
+    """Older lines calibrated before versioning: create a v-record from current baseline."""
+    if not line.get("baseline_profile"):
+        return
+    count = await db.baseline_versions.count_documents({"product_line_id": line["id"]})
+    if count > 0:
+        return
+    v = line.get("baseline_version", 1) or 1
+    await db.baseline_versions.insert_one({
+        "id": str(uuid.uuid4()),
+        "product_line_id": line["id"],
+        "version": v,
+        "profile": line.get("baseline_profile"),
+        "images": line.get("baseline_images", []),
+        "sample_count": len(line.get("baseline_images", []) or []),
+        "created_at": line.get("baseline_updated_at") or line.get("created_at"),
+    })
+
+
+@api_router.get("/product-lines/{line_id}/baseline-versions")
+async def list_baseline_versions(line_id: str):
+    line = await db.product_lines.find_one({"id": line_id}, {"_id": 0})
+    if not line:
+        raise HTTPException(404, "Product line not found")
+    await _backfill_versions(line)
+    versions = await db.baseline_versions.find({"product_line_id": line_id}, {"_id": 0}).sort("version", -1).to_list(1000)
+    active = line.get("baseline_version", 0)
+    out = []
+    for v in versions:
+        used = await db.inspections.count_documents({"product_line_id": line_id, "baseline_version": v["version"]})
+        prof = v.get("profile") or {}
+        out.append({
+            "id": v["id"],
+            "version": v["version"],
+            "created_at": v["created_at"],
+            "images": v.get("images", []),
+            "sample_count": v.get("sample_count", 0),
+            "part_summary": prof.get("part_summary", ""),
+            "component_count": len(prof.get("expected_components", []) or []),
+            "inspections_used": used,
+            "active": v["version"] == active,
+        })
+    return {"active_version": active, "versions": out}
+
+
+@api_router.post("/product-lines/{line_id}/baseline-versions/{version}/activate")
+async def activate_baseline_version(line_id: str, version: int):
+    line = await db.product_lines.find_one({"id": line_id}, {"_id": 0})
+    if not line:
+        raise HTTPException(404, "Product line not found")
+    v = await db.baseline_versions.find_one({"product_line_id": line_id, "version": version}, {"_id": 0})
+    if not v:
+        raise HTTPException(404, "Baseline version not found")
+    update = {
+        "baseline_profile": v.get("profile"),
+        "baseline_images": v.get("images", []),
+        "baseline_version": version,
+        "baseline_updated_at": now_iso(),
+    }
+    await db.product_lines.update_one({"id": line_id}, {"$set": update})
+    return line_public({**line, **update})
 
 
 @api_router.post("/product-lines/{line_id}/inspect")

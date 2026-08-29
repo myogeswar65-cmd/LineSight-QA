@@ -103,7 +103,8 @@
 ## 3. Next Actions
 - [DONE] Phase 1 POC passed (Gemini schema-valid JSON, bboxes, PASS/FAIL correct).
 - [DONE] Phase 2 built + tested end-to-end at 100% (backend 17/17, frontend 12/12).
-- Phase 3 (future, on request): baseline versioning history UI, export report (CSV/JSON), multi-view, acoustic/vibration mode.
+- [DONE] Baseline Versioning UI added: per-calibration versions saved, timeline "Versions" tab, one-click restore/rollback. Tested 100% (backend 4/4, frontend 14/14).
+- Future (on request): report export, batch inspect, live camera inspect, threshold control, swappable trained-model inspector.
 
 ## 4. Success Criteria
 - POC: Gemini returns **schema-valid JSON** with normalized bboxes and confidence on real images (with repair pass only rarely needed).

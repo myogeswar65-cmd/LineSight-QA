@@ -1,0 +1,42 @@
+{
+  "summary": "Completed comprehensive testing of the new Baseline Versioning UI feature. All backend endpoints and frontend UI components are working correctly. The feature allows users to view all baseline versions in a timeline, see which version is active, and restore any previous version with one click. Recalibration correctly creates new incrementing versions.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: GET /api/product-lines/{id}/baseline-versions returns correct structure with active_version and versions array",
+    "Backend: POST /api/product-lines/{id}/baseline-versions/{version}/activate successfully restores previous versions",
+    "Backend: Version activation correctly updates active flags and baseline_version field",
+    "Frontend: Versions tab (data-testid='tab-versions') renders and is accessible",
+    "Frontend: Versions timeline list (data-testid='baseline-versions-list') displays correctly",
+    "Frontend: Version rows (data-testid='version-row-{n}') render for each version",
+    "Frontend: Active version shows 'Active' badge and disabled 'In use' button",
+    "Frontend: Archived versions show 'Archived' badge and enabled 'Restore' button (data-testid='restore-version-{n}')",
+    "Frontend: Clicking Restore on archived version triggers API call and shows success toast",
+    "Frontend: After restore, version list refreshes with correct Active/Archived states",
+    "Frontend: Line header badge updates to show 'Calibrated v{restored_version}'",
+    "Frontend: Recalibrating via 'Use demo sample parts' button creates new incrementing version",
+    "Frontend: New version becomes active after calibration",
+    "Frontend: Tab switching between Calibration/Inspect/Versions/History/Insights works correctly without flicker or reverting"
+  ],
+  "test_report_links": [
+    "/app/backend_test.py",
+    "/root/.emergent/automation_output/20260829_150905/console_20260829_150905.log"
+  ],
+  "action_item_for_main_agent": "",
+  "updated_files": [
+    "/app/backend_test.py"
+  ],
+  "success_percentage": {
+    "backend": "100% (4/4 tests passed)",
+    "frontend": "100% (14/14 test scenarios passed)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}
