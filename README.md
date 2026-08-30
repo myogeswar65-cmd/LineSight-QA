@@ -211,9 +211,7 @@ No frontend or database changes required — true drop-in replacement.
 ## Notes & Limitations
 - **Vision model, not a trained CNN.** Gemini performs the anomaly reasoning (approved trade-off given the environment). It's a legitimate production pattern and a reference implementation of the inspection API.
 - **Latency.** Calibration and inspection each take ~10-30s (cloud model call). Non-vision endpoints are fast.
-- **Cost.** Gemini calls consume Emergent LLM key credits; you can swap in your own provider key anytime.
-- **Demo images** are synthetic (clearly labelled) and meant for trying the flow — use your own part images for real use.
+- **Demo images** are syntheticearly labelled) and meant for trying the flow — use your own part images for real use.
 
 ---
 
-_Built on the Emergent platform (FastAPI + React + MongoDB)._
